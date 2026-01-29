@@ -30,6 +30,14 @@ interface SyncSettings {
   watchTransitions: boolean;
   watchAudio: boolean;
   watchEffects: boolean;
+  watchKeys: boolean;
+  watchAux: boolean;
+  watchMacros: boolean;
+  watchMediaPlayers: boolean;
+  watchSuperSource: boolean;
+  watchMultiviewer: boolean;
+  watchColorGenerators: boolean;
+  watchStreaming: boolean;
 }
 
 export class ATEMConnectionManager extends EventEmitter {
@@ -45,6 +53,14 @@ export class ATEMConnectionManager extends EventEmitter {
     watchTransitions: true,
     watchAudio: true,
     watchEffects: true,
+    watchKeys: true,
+    watchAux: true,
+    watchMacros: true,
+    watchMediaPlayers: true,
+    watchSuperSource: true,
+    watchMultiviewer: false,
+    watchColorGenerators: true,
+    watchStreaming: false,
   };
 
   constructor() {
@@ -278,14 +294,24 @@ export class ATEMConnectionManager extends EventEmitter {
 
     // Filter state changes based on settings
     const pathLower = path.toLowerCase();
-    const isInputChange = (pathLower.includes('input') || pathLower.includes('mixeffects')) && this.syncSettings.watchInputs;
+    const isInputChange = (pathLower.includes('programinput') || pathLower.includes('previewinput')) && this.syncSettings.watchInputs;
     const isTransitionChange = pathLower.includes('transition') && this.syncSettings.watchTransitions;
-    const isAudioChange = pathLower.includes('audio') && this.syncSettings.watchAudio;
-    const isEffectChange = pathLower.includes('effect') && this.syncSettings.watchEffects;
+    const isAudioChange = (pathLower.includes('audio') || pathLower.includes('fairlight')) && this.syncSettings.watchAudio;
+    const isEffectChange = (pathLower.includes('fadeToBlack') || pathLower.includes('ftb')) && this.syncSettings.watchEffects;
+    const isKeyChange = (pathLower.includes('upstreamkeyer') || pathLower.includes('downstreamkeyer')) && this.syncSettings.watchKeys;
+    const isAuxChange = pathLower.includes('aux') && this.syncSettings.watchAux;
+    const isMacroChange = pathLower.includes('macro') && this.syncSettings.watchMacros;
+    const isMediaPlayerChange = pathLower.includes('mediaplayer') && this.syncSettings.watchMediaPlayers;
+    const isSuperSourceChange = pathLower.includes('supersource') && this.syncSettings.watchSuperSource;
+    const isMultiviewerChange = pathLower.includes('multiviewer') && this.syncSettings.watchMultiviewer;
+    const isColorGenChange = pathLower.includes('colorgenerator') && this.syncSettings.watchColorGenerators;
+    const isStreamingChange = (pathLower.includes('streaming') || pathLower.includes('recording')) && this.syncSettings.watchStreaming;
 
-    console.log(`Filters: input=${isInputChange}, transition=${isTransitionChange}, audio=${isAudioChange}, effect=${isEffectChange}`);
+    console.log(`Filters: input=${isInputChange}, transition=${isTransitionChange}, audio=${isAudioChange}, effect=${isEffectChange}, keys=${isKeyChange}, aux=${isAuxChange}`);
 
-    const shouldProcess = isInputChange || isTransitionChange || isAudioChange || isEffectChange;
+    const shouldProcess = isInputChange || isTransitionChange || isAudioChange || isEffectChange || 
+                          isKeyChange || isAuxChange || isMacroChange || isMediaPlayerChange || 
+                          isSuperSourceChange || isMultiviewerChange || isColorGenChange || isStreamingChange;
     if (!shouldProcess) {
       console.log(`Skipping sync for ${path} (not matching any watch filters)`);
       return;
@@ -374,45 +400,59 @@ export class ATEMConnectionManager extends EventEmitter {
         const dskMatch = path.match(/downstreamKeyers\.(\d+)/);
         const dskIndex = dskMatch ? parseInt(dskMatch[1], 10) : 0;
 
-        // Program/Preview Inputs
+        // Extract aux bus index if present
+        const auxMatch = path.match(/auxilliaries\.(\d+)/);
+        const auxIndex = auxMatch ? parseInt(auxMatch[1], 10) : 0;
+
+        // Extract media player index if present
+        const mpMatch = path.match(/mediaPlayers\.(\d+)/);
+        const mpIndex = mpMatch ? parseInt(mpMatch[1], 10) : 0;
+
+        // Extract SuperSource box index if present
+        const ssBoxMatch = path.match(/superSources\.(\d+)\.boxes\.(\d+)/);
+        const ssIndex = ssBoxMatch ? parseInt(ssBoxMatch[1], 10) : 0;
+        const ssBoxIndex = ssBoxMatch ? parseInt(ssBoxMatch[2], 10) : 0;
+
+        // Extract multiviewer indices if present
+        const mvMatch = path.match(/multiViewers\.(\d+)/);
+        const mvIndex = mvMatch ? parseInt(mvMatch[1], 10) : 0;
+        const mvWindowMatch = path.match(/windows\.(\d+)/);
+        const mvWindowIndex = mvWindowMatch ? parseInt(mvWindowMatch[1], 10) : 0;
+
+        // Extract color generator index if present
+        const cgMatch = path.match(/colorGenerators\.(\d+)/);
+        const cgIndex = cgMatch ? parseInt(cgMatch[1], 10) : 0;
+
+        // ============================================
+        // PROGRAM/PREVIEW INPUTS
+        // ============================================
         if (path.includes('programInput')) {
-          const sourceDevice = this.devices.get(device.id);
-          const oldPreview = sourceDevice?.lastPreviewInput;
-          
           console.log(`Syncing programInput to ${value} on ME ${meIndex} for device ${device.id}`);
           device.atemConnection.changeProgramInput(value, meIndex);
-          
-          // If we have a previous preview value, swap it (simulates CUT behavior)
-          // This happens when source ATEM does a CUT and only program changes
-          if (oldPreview !== undefined && oldPreview !== value) {
-            console.log(`Also syncing preview to maintain CUT behavior - setting preview to previous program`);
-            // The preview on the target should become what was in program
-            // But we need to get what was in program on the SOURCE, not target
-            // We'll handle this in the state change handler instead
-          }
         } 
         else if (path.includes('previewInput')) {
           console.log(`Syncing previewInput to ${value} on ME ${meIndex} for device ${device.id}`);
           device.atemConnection.changePreviewInput(value, meIndex);
-          console.log(`Preview input change command sent successfully`);
         }
-        
-        // Transitions
+
+        // ============================================
+        // TRANSITIONS
+        // ============================================
         else if (path.includes('transitionPosition')) {
-          // Extract handlePosition from the object
           const handlePosition = typeof value === 'object' && value?.handlePosition !== undefined 
             ? value.handlePosition 
             : value;
           console.log(`Syncing transitionPosition to ${handlePosition} on ME ${meIndex} for device ${device.id}`);
           device.atemConnection.setTransitionPosition(handlePosition, meIndex);
         }
-        else if (path.includes('transitionProperties.style')) {
-          console.log(`Syncing transition style to ${value} on ME ${meIndex} for device ${device.id}`);
-          device.atemConnection.setTransitionStyle(value, meIndex);
+        else if (path.includes('transitionProperties')) {
+          console.log(`Syncing transition properties on ME ${meIndex} for device ${device.id}`);
+          if (typeof value === 'object') {
+            device.atemConnection.setTransitionStyle(value, meIndex);
+          }
         }
         else if (path.includes('transitionSettings.mix')) {
           console.log(`Syncing mix transition settings for ME ${meIndex} for device ${device.id}`);
-          // Mix transition settings would need the full object
           if (typeof value === 'object') {
             device.atemConnection.setMixTransitionSettings(value, meIndex);
           }
@@ -435,11 +475,25 @@ export class ATEMConnectionManager extends EventEmitter {
             device.atemConnection.setDVETransitionSettings(value, meIndex);
           }
         }
-        
-        // Upstream Keyers (USK)
+        else if (path.includes('transitionSettings.stinger')) {
+          console.log(`Syncing stinger transition settings for ME ${meIndex} for device ${device.id}`);
+          if (typeof value === 'object') {
+            device.atemConnection.setStingerTransitionSettings(value, meIndex);
+          }
+        }
+
+        // ============================================
+        // UPSTREAM KEYERS (USK)
+        // ============================================
         else if (path.includes('upstreamKeyers') && path.includes('onAir')) {
           console.log(`Syncing USK ${uskIndex} onAir to ${value} on ME ${meIndex} for device ${device.id}`);
           device.atemConnection.setUpstreamKeyerOnAir(value, meIndex, uskIndex);
+        }
+        else if (path.includes('upstreamKeyers') && path.includes('mixEffectKeyType')) {
+          console.log(`Syncing USK ${uskIndex} type settings on ME ${meIndex} for device ${device.id}`);
+          if (typeof value === 'object') {
+            device.atemConnection.setUpstreamKeyerType(value, meIndex, uskIndex);
+          }
         }
         else if (path.includes('upstreamKeyers') && path.includes('lumaSettings')) {
           console.log(`Syncing USK ${uskIndex} luma settings on ME ${meIndex} for device ${device.id}`);
@@ -453,6 +507,30 @@ export class ATEMConnectionManager extends EventEmitter {
             device.atemConnection.setUpstreamKeyerChromaSettings(value, meIndex, uskIndex);
           }
         }
+        else if (path.includes('upstreamKeyers') && path.includes('advancedChromaSettings')) {
+          console.log(`Syncing USK ${uskIndex} advanced chroma on ME ${meIndex} for device ${device.id}`);
+          if (typeof value === 'object') {
+            device.atemConnection.setUpstreamKeyerAdvancedChromaProperties(value, meIndex, uskIndex);
+          }
+        }
+        else if (path.includes('upstreamKeyers') && path.includes('patternSettings')) {
+          console.log(`Syncing USK ${uskIndex} pattern settings on ME ${meIndex} for device ${device.id}`);
+          if (typeof value === 'object') {
+            device.atemConnection.setUpstreamKeyerPatternSettings(value, meIndex, uskIndex);
+          }
+        }
+        else if (path.includes('upstreamKeyers') && path.includes('dveSettings')) {
+          console.log(`Syncing USK ${uskIndex} DVE settings on ME ${meIndex} for device ${device.id}`);
+          if (typeof value === 'object') {
+            device.atemConnection.setUpstreamKeyerDVESettings(value, meIndex, uskIndex);
+          }
+        }
+        else if (path.includes('upstreamKeyers') && path.includes('maskSettings')) {
+          console.log(`Syncing USK ${uskIndex} mask settings on ME ${meIndex} for device ${device.id}`);
+          if (typeof value === 'object') {
+            device.atemConnection.setUpstreamKeyerMaskSettings(value, meIndex, uskIndex);
+          }
+        }
         else if (path.includes('upstreamKeyers') && path.includes('fillSource')) {
           console.log(`Syncing USK ${uskIndex} fill source to ${value} on ME ${meIndex} for device ${device.id}`);
           device.atemConnection.setUpstreamKeyerFillSource(value, meIndex, uskIndex);
@@ -461,8 +539,10 @@ export class ATEMConnectionManager extends EventEmitter {
           console.log(`Syncing USK ${uskIndex} cut source to ${value} on ME ${meIndex} for device ${device.id}`);
           device.atemConnection.setUpstreamKeyerCutSource(value, meIndex, uskIndex);
         }
-        
-        // Downstream Keyers (DSK)
+
+        // ============================================
+        // DOWNSTREAM KEYERS (DSK)
+        // ============================================
         else if (path.includes('downstreamKeyers') && path.includes('onAir')) {
           console.log(`Syncing DSK ${dskIndex} onAir to ${value} for device ${device.id}`);
           device.atemConnection.setDownstreamKeyOnAir(value, dskIndex);
@@ -479,53 +559,218 @@ export class ATEMConnectionManager extends EventEmitter {
           console.log(`Syncing DSK ${dskIndex} cut source to ${value} for device ${device.id}`);
           device.atemConnection.setDownstreamKeyCutSource(value, dskIndex);
         }
-        
-        // Fade to Black
+        else if (path.includes('downstreamKeyers') && path.includes('rate')) {
+          console.log(`Syncing DSK ${dskIndex} rate to ${value} for device ${device.id}`);
+          device.atemConnection.setDownstreamKeyRate(value, dskIndex);
+        }
+        else if (path.includes('downstreamKeyers') && path.includes('properties')) {
+          console.log(`Syncing DSK ${dskIndex} properties for device ${device.id}`);
+          if (typeof value === 'object') {
+            device.atemConnection.setDownstreamKeyGeneralProperties(value, dskIndex);
+          }
+        }
+        else if (path.includes('downstreamKeyers') && path.includes('mask')) {
+          console.log(`Syncing DSK ${dskIndex} mask settings for device ${device.id}`);
+          if (typeof value === 'object') {
+            device.atemConnection.setDownstreamKeyMaskSettings(value, dskIndex);
+          }
+        }
+
+        // ============================================
+        // FADE TO BLACK
+        // ============================================
         else if (path.includes('fadeToBlack') && path.includes('isFullyBlack')) {
           console.log(`Syncing fade to black state to ${value} on ME ${meIndex} for device ${device.id}`);
           if (value === true) {
             device.atemConnection.fadeToBlack(meIndex);
           }
         }
-        
-        // Audio
-        else if (path.includes('audio.channels') && path.includes('gain')) {
+        else if (path.includes('fadeToBlack') && path.includes('rate')) {
+          console.log(`Syncing fade to black rate to ${value} on ME ${meIndex} for device ${device.id}`);
+          device.atemConnection.setFadeToBlackRate(value, meIndex);
+        }
+
+        // ============================================
+        // AUX OUTPUTS
+        // ============================================
+        else if (path.includes('auxilliaries')) {
+          console.log(`Syncing AUX ${auxIndex} source to ${value} for device ${device.id}`);
+          device.atemConnection.setAuxSource(value, auxIndex);
+        }
+
+        // ============================================
+        // MEDIA PLAYERS
+        // ============================================
+        else if (path.includes('mediaPlayers') && path.includes('source')) {
+          console.log(`Syncing Media Player ${mpIndex} source for device ${device.id}`);
+          if (typeof value === 'object') {
+            device.atemConnection.setMediaPlayerSource(value, mpIndex);
+          }
+        }
+        else if (path.includes('mediaPlayers') && !path.includes('source')) {
+          console.log(`Syncing Media Player ${mpIndex} settings for device ${device.id}`);
+          if (typeof value === 'object') {
+            device.atemConnection.setMediaPlayerSettings(value, mpIndex);
+          }
+        }
+
+        // ============================================
+        // SUPERSOURCE
+        // ============================================
+        else if (path.includes('superSources') && path.includes('boxes')) {
+          console.log(`Syncing SuperSource ${ssIndex} Box ${ssBoxIndex} for device ${device.id}`);
+          if (typeof value === 'object') {
+            device.atemConnection.setSuperSourceBoxSettings(value, ssBoxIndex, ssIndex);
+          }
+        }
+        else if (path.includes('superSources') && path.includes('border')) {
+          console.log(`Syncing SuperSource ${ssIndex} border for device ${device.id}`);
+          if (typeof value === 'object') {
+            device.atemConnection.setSuperSourceBorder(value, ssIndex);
+          }
+        }
+        else if (path.includes('superSources') && path.includes('properties')) {
+          console.log(`Syncing SuperSource ${ssIndex} properties for device ${device.id}`);
+          if (typeof value === 'object') {
+            device.atemConnection.setSuperSourceProperties(value, ssIndex);
+          }
+        }
+
+        // ============================================
+        // MULTIVIEWER
+        // ============================================
+        else if (path.includes('multiViewers') && path.includes('windows') && path.includes('source')) {
+          console.log(`Syncing MultiViewer ${mvIndex} Window ${mvWindowIndex} source to ${value} for device ${device.id}`);
+          device.atemConnection.setMultiViewerWindowSource(value, mvIndex, mvWindowIndex);
+        }
+        else if (path.includes('multiViewers') && path.includes('windows') && path.includes('safeArea')) {
+          console.log(`Syncing MultiViewer ${mvIndex} Window ${mvWindowIndex} safe area for device ${device.id}`);
+          device.atemConnection.setMultiViewerWindowSafeAreaEnabled(value, mvIndex, mvWindowIndex);
+        }
+        else if (path.includes('multiViewers') && path.includes('windows') && path.includes('vuMeter')) {
+          console.log(`Syncing MultiViewer ${mvIndex} Window ${mvWindowIndex} VU meter for device ${device.id}`);
+          device.atemConnection.setMultiViewerWindowVuEnabled(value, mvIndex, mvWindowIndex);
+        }
+        else if (path.includes('multiViewers') && path.includes('properties')) {
+          console.log(`Syncing MultiViewer ${mvIndex} properties for device ${device.id}`);
+          if (typeof value === 'object') {
+            device.atemConnection.setMultiViewerProperties(value, mvIndex);
+          }
+        }
+        else if (path.includes('multiViewers') && path.includes('vuOpacity')) {
+          console.log(`Syncing MultiViewer ${mvIndex} VU opacity to ${value} for device ${device.id}`);
+          device.atemConnection.setMultiViewerVuOpacity(value, mvIndex);
+        }
+
+        // ============================================
+        // COLOR GENERATORS
+        // ============================================
+        else if (path.includes('colorGenerators')) {
+          console.log(`Syncing Color Generator ${cgIndex} for device ${device.id}`);
+          if (typeof value === 'object') {
+            device.atemConnection.setColorGeneratorColour(value, cgIndex);
+          }
+        }
+
+        // ============================================
+        // MACROS
+        // ============================================
+        else if (path.includes('macro') && path.includes('isRunning') && value === true) {
+          const macroMatch = path.match(/macroPlayer\.macroIndex/);
+          console.log(`Macro triggered - syncing macro run for device ${device.id}`);
+          // Macro index would need to be extracted from state
+        }
+        else if (path.includes('macro') && path.includes('loop')) {
+          console.log(`Syncing macro loop setting to ${value} for device ${device.id}`);
+          device.atemConnection.macroSetLoop(value);
+        }
+
+        // ============================================
+        // CLASSIC AUDIO MIXER
+        // ============================================
+        else if (path.includes('audio.channels')) {
           const channelMatch = path.match(/channels\.(\d+)/);
           if (channelMatch) {
             const channelIndex = parseInt(channelMatch[1], 10);
-            console.log(`Syncing audio channel ${channelIndex} gain to ${value} for device ${device.id}`);
-            // Audio sync requires specific ATEM library methods - needs implementation
-            // device.atemConnection.setAudioMixerInputGain(channelIndex, value);
+            console.log(`Syncing audio channel ${channelIndex} settings for device ${device.id}`);
+            if (typeof value === 'object') {
+              device.atemConnection.setClassicAudioMixerInputProps(channelIndex, value);
+            }
           }
         }
-        else if (path.includes('audio.channels') && path.includes('balance')) {
-          const channelMatch = path.match(/channels\.(\d+)/);
-          if (channelMatch) {
-            const channelIndex = parseInt(channelMatch[1], 10);
-            console.log(`Syncing audio channel ${channelIndex} balance to ${value} for device ${device.id}`);
-            // Audio sync requires specific ATEM library methods - needs implementation
-            // device.atemConnection.setAudioMixerInputBalance(channelIndex, value);
+        else if (path.includes('audio.master')) {
+          console.log(`Syncing audio master settings for device ${device.id}`);
+          if (typeof value === 'object') {
+            device.atemConnection.setClassicAudioMixerMasterProps(value);
           }
         }
-        else if (path.includes('audio.channels') && path.includes('mixOption')) {
-          const channelMatch = path.match(/channels\.(\d+)/);
-          if (channelMatch) {
-            const channelIndex = parseInt(channelMatch[1], 10);
-            console.log(`Syncing audio channel ${channelIndex} mix option to ${value} for device ${device.id}`);
-            // Audio sync requires specific ATEM library methods - needs implementation
-            // device.atemConnection.setAudioMixerInputMixOption(channelIndex, value);
+        else if (path.includes('audio.monitor')) {
+          console.log(`Syncing audio monitor settings for device ${device.id}`);
+          if (typeof value === 'object') {
+            device.atemConnection.setClassicAudioMixerMonitorProps(value);
           }
         }
-        
+
+        // ============================================
+        // FAIRLIGHT AUDIO
+        // ============================================
+        else if (path.includes('fairlight') && path.includes('inputs')) {
+          const flInputMatch = path.match(/inputs\.(\d+)/);
+          if (flInputMatch) {
+            const inputIndex = parseInt(flInputMatch[1], 10);
+            if (path.includes('sources')) {
+              const sourceMatch = path.match(/sources\.([\w-]+)/);
+              if (sourceMatch) {
+                const sourceId = sourceMatch[1];
+                console.log(`Syncing Fairlight input ${inputIndex} source ${sourceId} for device ${device.id}`);
+                if (typeof value === 'object') {
+                  device.atemConnection.setFairlightAudioMixerSourceProps(inputIndex, sourceId, value);
+                }
+              }
+            } else {
+              console.log(`Syncing Fairlight input ${inputIndex} for device ${device.id}`);
+              if (typeof value === 'object') {
+                device.atemConnection.setFairlightAudioMixerInputProps(inputIndex, value);
+              }
+            }
+          }
+        }
+        else if (path.includes('fairlight') && path.includes('master')) {
+          console.log(`Syncing Fairlight master settings for device ${device.id}`);
+          if (typeof value === 'object') {
+            device.atemConnection.setFairlightAudioMixerMasterProps(value);
+          }
+        }
+        else if (path.includes('fairlight') && path.includes('monitor')) {
+          console.log(`Syncing Fairlight monitor settings for device ${device.id}`);
+          if (typeof value === 'object') {
+            device.atemConnection.setFairlightAudioMixerMonitorProps(value);
+          }
+        }
+
+        // ============================================
+        // INPUT SETTINGS
+        // ============================================
+        else if (path.includes('inputs') && (path.includes('shortName') || path.includes('longName'))) {
+          const inputMatch = path.match(/inputs\.(\d+)/);
+          if (inputMatch) {
+            const inputIndex = parseInt(inputMatch[1], 10);
+            console.log(`Syncing input ${inputIndex} settings for device ${device.id}`);
+            if (typeof value === 'object') {
+              device.atemConnection.setInputSettings(value, inputIndex);
+            }
+          }
+        }
+
         else {
-          console.log(`Unknown sync path: ${path} = ${value}`);
+          console.log(`Unknown sync path: ${path} = ${typeof value === 'object' ? JSON.stringify(value) : value}`);
         }
         
-        console.log(`✓ Synced ${path} = ${value} to device ${device.id}`);
+        console.log(`✓ Synced ${path} to device ${device.id}`);
       } catch (error) {
         console.error(`✗ Failed to sync ${path} to device ${device.id}:`, error);
       }
-    }, this.syncSettings.syncDelay);
+    }, delay);
   }
 
   setSyncSettings(settings: Partial<SyncSettings>): void {

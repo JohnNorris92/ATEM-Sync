@@ -10,7 +10,7 @@ const SyncSettings: React.FC<SyncSettingsProps> = ({ settings, onUpdate }) => {
   return (
     <div className='sync-settings'>
       <div className='settings-section'>
-        <div className='settings-title'>Sync Direction</div>
+        <div className='settings-title'>Sync Control</div>
         <div className='checkbox-group'>
           <input
             type='checkbox'
@@ -23,7 +23,7 @@ const SyncSettings: React.FC<SyncSettingsProps> = ({ settings, onUpdate }) => {
       </div>
 
       <div className='settings-section'>
-        <div className='settings-title'>Sync Modes</div>
+        <div className='settings-title'>Sync Direction</div>
         <div className='checkbox-group'>
           <input
             type='checkbox'
@@ -47,46 +47,146 @@ const SyncSettings: React.FC<SyncSettingsProps> = ({ settings, onUpdate }) => {
       </div>
 
       <div className='settings-section'>
-        <div className='settings-title'>Watch Events</div>
-        <div className='checkbox-group'>
-          <input
-            type='checkbox'
-            id='watchInputs'
-            checked={settings.watchInputs}
-            onChange={(e) => onUpdate({ watchInputs: e.target.checked })}
-            disabled={!settings.syncEnabled}
-          />
-          <label htmlFor='watchInputs'>Input Changes</label>
+        <div className='settings-title'>Video Switching</div>
+        <div className='settings-grid'>
+          <div className='checkbox-group'>
+            <input
+              type='checkbox'
+              id='watchInputs'
+              checked={settings.watchInputs}
+              onChange={(e) => onUpdate({ watchInputs: e.target.checked })}
+              disabled={!settings.syncEnabled}
+            />
+            <label htmlFor='watchInputs'>Program/Preview</label>
+          </div>
+          <div className='checkbox-group'>
+            <input
+              type='checkbox'
+              id='watchTransitions'
+              checked={settings.watchTransitions}
+              onChange={(e) => onUpdate({ watchTransitions: e.target.checked })}
+              disabled={!settings.syncEnabled}
+            />
+            <label htmlFor='watchTransitions'>Transitions</label>
+          </div>
+          <div className='checkbox-group'>
+            <input
+              type='checkbox'
+              id='watchEffects'
+              checked={settings.watchEffects}
+              onChange={(e) => onUpdate({ watchEffects: e.target.checked })}
+              disabled={!settings.syncEnabled}
+            />
+            <label htmlFor='watchEffects'>Fade to Black</label>
+          </div>
+          <div className='checkbox-group'>
+            <input
+              type='checkbox'
+              id='watchAux'
+              checked={settings.watchAux}
+              onChange={(e) => onUpdate({ watchAux: e.target.checked })}
+              disabled={!settings.syncEnabled}
+            />
+            <label htmlFor='watchAux'>AUX Outputs</label>
+          </div>
         </div>
-        <div className='checkbox-group'>
-          <input
-            type='checkbox'
-            id='watchTransitions'
-            checked={settings.watchTransitions}
-            onChange={(e) => onUpdate({ watchTransitions: e.target.checked })}
-            disabled={!settings.syncEnabled}
-          />
-          <label htmlFor='watchTransitions'>Transitions</label>
+      </div>
+
+      <div className='settings-section'>
+        <div className='settings-title'>Keyers</div>
+        <div className='settings-grid'>
+          <div className='checkbox-group'>
+            <input
+              type='checkbox'
+              id='watchKeys'
+              checked={settings.watchKeys}
+              onChange={(e) => onUpdate({ watchKeys: e.target.checked })}
+              disabled={!settings.syncEnabled}
+            />
+            <label htmlFor='watchKeys'>USK/DSK</label>
+          </div>
+          <div className='checkbox-group'>
+            <input
+              type='checkbox'
+              id='watchSuperSource'
+              checked={settings.watchSuperSource}
+              onChange={(e) => onUpdate({ watchSuperSource: e.target.checked })}
+              disabled={!settings.syncEnabled}
+            />
+            <label htmlFor='watchSuperSource'>SuperSource</label>
+          </div>
         </div>
-        <div className='checkbox-group'>
-          <input
-            type='checkbox'
-            id='watchAudio'
-            checked={settings.watchAudio}
-            onChange={(e) => onUpdate({ watchAudio: e.target.checked })}
-            disabled={!settings.syncEnabled}
-          />
-          <label htmlFor='watchAudio'>Audio Levels</label>
+      </div>
+
+      <div className='settings-section'>
+        <div className='settings-title'>Audio & Media</div>
+        <div className='settings-grid'>
+          <div className='checkbox-group'>
+            <input
+              type='checkbox'
+              id='watchAudio'
+              checked={settings.watchAudio}
+              onChange={(e) => onUpdate({ watchAudio: e.target.checked })}
+              disabled={!settings.syncEnabled}
+            />
+            <label htmlFor='watchAudio'>Audio Mixer</label>
+          </div>
+          <div className='checkbox-group'>
+            <input
+              type='checkbox'
+              id='watchMediaPlayers'
+              checked={settings.watchMediaPlayers}
+              onChange={(e) => onUpdate({ watchMediaPlayers: e.target.checked })}
+              disabled={!settings.syncEnabled}
+            />
+            <label htmlFor='watchMediaPlayers'>Media Players</label>
+          </div>
+          <div className='checkbox-group'>
+            <input
+              type='checkbox'
+              id='watchColorGenerators'
+              checked={settings.watchColorGenerators}
+              onChange={(e) => onUpdate({ watchColorGenerators: e.target.checked })}
+              disabled={!settings.syncEnabled}
+            />
+            <label htmlFor='watchColorGenerators'>Color Generators</label>
+          </div>
         </div>
-        <div className='checkbox-group'>
-          <input
-            type='checkbox'
-            id='watchEffects'
-            checked={settings.watchEffects}
-            onChange={(e) => onUpdate({ watchEffects: e.target.checked })}
-            disabled={!settings.syncEnabled}
-          />
-          <label htmlFor='watchEffects'>Effects</label>
+      </div>
+
+      <div className='settings-section'>
+        <div className='settings-title'>Other</div>
+        <div className='settings-grid'>
+          <div className='checkbox-group'>
+            <input
+              type='checkbox'
+              id='watchMacros'
+              checked={settings.watchMacros}
+              onChange={(e) => onUpdate({ watchMacros: e.target.checked })}
+              disabled={!settings.syncEnabled}
+            />
+            <label htmlFor='watchMacros'>Macros</label>
+          </div>
+          <div className='checkbox-group'>
+            <input
+              type='checkbox'
+              id='watchMultiviewer'
+              checked={settings.watchMultiviewer}
+              onChange={(e) => onUpdate({ watchMultiviewer: e.target.checked })}
+              disabled={!settings.syncEnabled}
+            />
+            <label htmlFor='watchMultiviewer'>Multiviewer</label>
+          </div>
+          <div className='checkbox-group'>
+            <input
+              type='checkbox'
+              id='watchStreaming'
+              checked={settings.watchStreaming}
+              onChange={(e) => onUpdate({ watchStreaming: e.target.checked })}
+              disabled={!settings.syncEnabled}
+            />
+            <label htmlFor='watchStreaming'>Streaming/Recording</label>
+          </div>
         </div>
       </div>
 

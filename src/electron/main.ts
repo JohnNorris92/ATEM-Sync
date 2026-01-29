@@ -25,6 +25,14 @@ const store = new Store<AppConfig>({
       watchTransitions: true,
       watchAudio: true,
       watchEffects: true,
+      watchKeys: true,
+      watchAux: true,
+      watchMacros: true,
+      watchMediaPlayers: true,
+      watchSuperSource: true,
+      watchMultiviewer: false,
+      watchColorGenerators: true,
+      watchStreaming: false,
     }
   }
 });
@@ -45,10 +53,6 @@ const createWindow = () => {
     : `file://${path.join(__dirname, '../../build/index.html')}`;
 
   mainWindow.loadURL(startUrl);
-
-  if (isDev) {
-    mainWindow.webContents.openDevTools();
-  }
 
   mainWindow.on('closed', () => {
     mainWindow = null;

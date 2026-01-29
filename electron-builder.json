@@ -1,29 +1,27 @@
 {
   "productName": "ATEM Sync",
   "appId": "com.atemsync.app",
+  "extends": null,
   "files": [
     "dist/**/*",
+    "build/**/*",
     "node_modules/**/*",
     "package.json"
   ],
   "directories": {
-    "buildResources": "assets"
+    "buildResources": "assets",
+    "output": "release"
   },
   "win": {
     "target": [
-      {
-        "target": "nsis",
-        "arch": [
-          "x64"
-        ]
-      },
       {
         "target": "portable",
         "arch": [
           "x64"
         ]
       }
-    ]
+    ],
+    "signAndEditExecutable": false
   },
   "nsis": {
     "oneClick": false,

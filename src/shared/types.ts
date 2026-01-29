@@ -5,9 +5,12 @@ declare global {
       disconnectATEM: (id: string) => Promise<any>;
       getATEMStatus: () => Promise<any>;
       setSyncSettings: (settings: any) => Promise<any>;
+      getStateLogs: (limit?: number) => Promise<any>;
+      clearStateLogs: () => Promise<any>;
       loadConfig: () => Promise<AppConfig>;
       saveConfig: (config: AppConfig) => Promise<any>;
       onStateChange: (callback: (data: any) => void) => void;
+      onStateLog: (callback: (data: any) => void) => void;
       onConnectionChange: (callback: (data: any) => void) => void;
     };
   }
@@ -30,6 +33,14 @@ export interface SyncSettings {
   watchTransitions: boolean;
   watchAudio: boolean;
   watchEffects: boolean;
+  watchKeys: boolean;
+  watchAux: boolean;
+  watchMacros: boolean;
+  watchMediaPlayers: boolean;
+  watchSuperSource: boolean;
+  watchMultiviewer: boolean;
+  watchColorGenerators: boolean;
+  watchStreaming: boolean;
 }
 
 export interface AppConfig {

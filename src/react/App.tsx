@@ -17,6 +17,14 @@ function App() {
     watchTransitions: true,
     watchAudio: true,
     watchEffects: true,
+    watchKeys: true,
+    watchAux: true,
+    watchMacros: true,
+    watchMediaPlayers: true,
+    watchSuperSource: true,
+    watchMultiviewer: false,
+    watchColorGenerators: true,
+    watchStreaming: false,
   });
   const [configLoaded, setConfigLoaded] = useState(false);
 
@@ -55,20 +63,13 @@ function App() {
     }
   }, []);
 
-  // Save config whenever devices change (after initial load)
+  // Save config whenever devices or sync settings change (after initial load)
   useEffect(() => {
     if (configLoaded && window.electronAPI) {
       window.electronAPI.saveConfig({ devices, syncSettings });
       console.log('Saved configuration');
     }
-  }, [devices, configLoaded]);
-
-  // Save config whenever sync settings change (after initial load)
-  useEffect(() => {
-    if (configLoaded && window.electronAPI) {
-      window.electronAPI.saveConfig({ devices, syncSettings });
-    }
-  }, [syncSettings, configLoaded]);
+  }, [devices, syncSettings, configLoaded]);
 
   const updateDeviceStatus = async () => {
     if (window.electronAPI) {

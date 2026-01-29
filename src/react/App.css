@@ -230,6 +230,12 @@ button {
   cursor: pointer;
 }
 
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 20px;
+}
+
 .slider-group {
   display: flex;
   align-items: center;
