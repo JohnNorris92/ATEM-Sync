@@ -1,0 +1,7 @@
+{
+  "watch": ["src/electron"],
+  "ext": "ts",
+  "ignore": ["src/electron/**/*.test.ts", "dist"],
+  "delay": 500,
+  "exec": "npm run build:electron && electron ."
+}

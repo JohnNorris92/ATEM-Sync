@@ -1,0 +1,65 @@
+{
+  "name": "atem-sync",
+  "version": "0.1.0",
+  "description": "Synchronize multiple ATEM switchers in real-time with bidirectional control",
+  "main": "dist/electron/main.js",
+  "homepage": "./",
+  "author": "",
+  "license": "MIT",
+  "scripts": {
+    "start": "concurrently \"npm run start:react\" \"wait-on http://localhost:3000 && npm run start:electron\"",
+    "start:react": "react-scripts start",
+    "start:electron": "electron .",
+    "build": "npm run build:react && npm run build:electron",
+    "build:react": "react-scripts build",
+    "build:electron": "tsc --project tsconfig.electron.json",
+    "watch:electron": "nodemon --watch src/electron --ext ts --exec \"npm run build:electron && electron .\"",
+    "eject": "react-scripts eject",
+    "test": "react-scripts test",
+    "dev": "concurrently \"npm run start:react\" \"wait-on http://localhost:3000 && npm run watch:electron\" --kill-others-on-exit",
+    "dev:electron-only": "npm run watch:electron",
+    "pack": "electron-builder --dir",
+    "dist": "npm run build:electron && electron-builder"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "dependencies": {
+    "atem-connection": "^3.8.0",
+    "electron-is-dev": "^2.0.0",
+    "electron-store": "^8.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1",
+    "zustand": "^4.4.1"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^5.16.5",
+    "@testing-library/react": "^13.4.0",
+    "@testing-library/user-event": "^13.5.0",
+    "@types/electron": "^1.6.10",
+    "@types/node": "^18.11.18",
+    "@types/react": "^18.0.26",
+    "@types/react-dom": "^18.0.10",
+    "concurrently": "^7.6.0",
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.4",
+    "nodemon": "^3.1.11",
+    "typescript": "^4.9.4",
+    "wait-on": "^7.0.1"
+  }
+}
