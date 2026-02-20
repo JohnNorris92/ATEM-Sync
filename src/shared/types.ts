@@ -1,7 +1,7 @@
 declare global {
   interface Window {
     electronAPI: {
-      connectATEM: (id: string, ip: string) => Promise<any>;
+      connectATEM: (id: string, ip: string, software: 'atem' | 'vmix', port: number) => Promise<any>;
       disconnectATEM: (id: string) => Promise<any>;
       getATEMStatus: () => Promise<any>;
       setSyncSettings: (settings: any) => Promise<any>;
@@ -21,13 +21,13 @@ export interface ATEMDevice {
   ip: string;
   connected: boolean;
   label: string;
-  type: 'local' | 'remote';
+  type: 'master' | 'slave';
+  software: 'atem' | 'vmix';
+  port: number;
 }
 
 export interface SyncSettings {
   syncEnabled: boolean;
-  localToRemote: boolean;
-  remoteToLocal: boolean;
   syncDelay: number;
   watchInputs: boolean;
   watchTransitions: boolean;

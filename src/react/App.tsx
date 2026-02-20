@@ -6,12 +6,10 @@ import SyncSettingsPanel from './components/SyncSettings';
 
 function App() {
   const [devices, setDevices] = useState<ATEMDevice[]>([
-    { id: 'local', ip: '', label: 'Local ATEM', type: 'local', connected: false },
+    { id: 'master', ip: '', label: 'Master ATEM', type: 'master', connected: false, software: 'atem', port: 9910 },
   ]);
   const [syncSettings, setSyncSettingsState] = useState<SyncSettings>({
     syncEnabled: true,
-    localToRemote: true,
-    remoteToLocal: true,
     syncDelay: 50,
     watchInputs: true,
     watchTransitions: true,
@@ -75,7 +73,7 @@ function App() {
     if (window.electronAPI) {
       const status = await window.electronAPI.getATEMStatus();
       console.log('ATEM Status:', status);
-      
+
       // Update local device states based on manager status
       setDevices(prevDevices =>
         prevDevices.map(device => ({
@@ -86,19 +84,21 @@ function App() {
     }
   };
 
-  const handleAddRemote = () => {
-    const newRemote: ATEMDevice = {
-      id: `remote-${Date.now()}`,
+  const handleAddSlave = () => {
+    const newSlave: ATEMDevice = {
+      id: `slave-${Date.now()}`,
       ip: '',
-      label: `Remote ATEM ${devices.filter((d) => d.type === 'remote').length + 1}`,
-      type: 'remote',
+      label: `Slave ATEM ${devices.filter((d) => d.type === 'slave').length + 1}`,
+      type: 'slave',
       connected: false,
+      software: 'atem',
+      port: 9910,
     };
-    setDevices([...devices, newRemote]);
+    setDevices([...devices, newSlave]);
   };
 
-  const handleRemoveRemote = (id: string) => {
-    if (id !== 'local') {
+  const handleRemoveSlave = (id: string) => {
+    if (id !== 'master') {
       setDevices(devices.filter((d) => d.id !== id));
     }
   };
@@ -122,23 +122,33 @@ function App() {
   return (
     <div className='App'>
       <header className='App-header'>
-        <h1>ATEM Sync Manager</h1>
+        <h1>ATEM Sync</h1>
+        <div className='sync-status-badge'>
+          <span className={`status-dot ${syncSettings.syncEnabled ? 'active' : 'inactive'}`} />
+          <span className={`status-label ${syncSettings.syncEnabled ? 'active' : 'inactive'}`}>
+            Sync: {syncSettings.syncEnabled ? 'ON' : 'OFF'}
+          </span>
+        </div>
       </header>
       <main className='App-main'>
-        <div className='panels-container'>
+        <div className='devices-column'>
+          <h2 className='column-heading'>Devices</h2>
           {devices.map((device) => (
             <ConnectionPanel
               key={device.id}
               device={device}
-              onRemove={handleRemoveRemote}
+              onRemove={handleRemoveSlave}
               onUpdate={handleUpdateDevice}
             />
           ))}
-          <button className='btn-add-remote' onClick={handleAddRemote}>
-            + Add Remote ATEM
+          <button className='btn-add-slave' onClick={handleAddSlave}>
+            + Add Slave
           </button>
         </div>
-        <SyncSettingsPanel settings={syncSettings} onUpdate={handleUpdateSyncSettings} />
+        <div className='settings-column'>
+          <h2 className='column-heading'>Sync Settings</h2>
+          <SyncSettingsPanel settings={syncSettings} onUpdate={handleUpdateSyncSettings} />
+        </div>
       </main>
     </div>
   );

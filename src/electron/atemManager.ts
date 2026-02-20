@@ -1,12 +1,16 @@
 import { EventEmitter } from 'events';
 import { Atem } from 'atem-connection';
+import { VmixConnection } from './vmixConnection';
 
 interface ATEMDevice {
   id: string;
   ip: string;
   connected: boolean;
   lastState: any;
+  software: 'atem' | 'vmix';
+  port: number;
   atemConnection?: Atem;
+  vmixConnection?: VmixConnection;
   lastProgramInput?: number;
   lastPreviewInput?: number;
   inTransition?: boolean;
@@ -23,8 +27,6 @@ interface StateChangeLog {
 
 interface SyncSettings {
   syncEnabled: boolean;
-  localToRemote: boolean;
-  remoteToLocal: boolean;
   syncDelay: number;
   watchInputs: boolean;
   watchTransitions: boolean;
@@ -46,8 +48,6 @@ export class ATEMConnectionManager extends EventEmitter {
   private maxLogs: number = 500; // Keep last 500 logs
   private syncSettings: SyncSettings = {
     syncEnabled: true,
-    localToRemote: true,
-    remoteToLocal: true,
     syncDelay: 50,
     watchInputs: true,
     watchTransitions: true,
@@ -67,7 +67,9 @@ export class ATEMConnectionManager extends EventEmitter {
     super();
   }
 
-  async connect(id: string, ip: string): Promise<void> {
+  async connect(id: string, ip: string, software: 'atem' | 'vmix' = 'atem', port?: number): Promise<void> {
+    const effectivePort = port ?? (software === 'vmix' ? 8099 : 9910);
+
     try {
       // Validate IP address format
       if (!this.isValidIP(ip)) {
@@ -79,122 +81,17 @@ export class ATEMConnectionManager extends EventEmitter {
         ip,
         connected: false,
         lastState: null,
+        software,
+        port: effectivePort,
       };
 
       this.devices.set(id, device);
 
-      // Create ATEM connection
-      const atemConnection = new Atem();
-      device.atemConnection = atemConnection;
-
-      // Setup info and debug logging
-      atemConnection.on('info', (msg: string) => {
-        console.log(`[INFO] ATEM ${id}:`, msg);
-      });
-
-      atemConnection.on('debug', (msg: string) => {
-        // Suppress "Unknown command" debug messages to reduce noise
-        if (!msg.includes('Unknown command')) {
-          console.log(`[DEBUG] ATEM ${id}:`, msg);
-        }
-      });
-
-      // Setup error handling
-      atemConnection.on('error', (error: any) => {
-        console.error(`ATEM ${id} error:`, error);
-        this.logStateChange(id, ip, 'connection.error', device.connected, false);
-        device.connected = false;
-        this.emit('connection-change', id, false);
-      });
-
-      // Setup disconnection handling
-      atemConnection.on('disconnected', () => {
-        console.log(`ATEM ${id} disconnected`);
-        this.logStateChange(id, ip, 'connection.disconnected', device.connected, false);
-        device.connected = false;
-        this.emit('connection-change', id, false);
-      });
-
-      // Setup connection success
-      atemConnection.on('connected', () => {
-        console.log(`Connected to ATEM ${id} at ${ip}`);
-        this.logStateChange(id, ip, 'connection.connected', device.connected, true);
-        device.connected = true;
-        this.emit('connection-change', id, true);
-      });
-
-      // Setup state change logging
-      atemConnection.on('stateChanged', (state: any, pathArray: string[]) => {
-        console.log(`[DEBUG v2] stateChanged event fired for ${id}`);
-        device.lastState = state;
-        
-        // Path comes as a single string in an array, e.g., ['video.mixEffects.0.programInput']
-        // Split it into individual segments
-        const pathString = pathArray[0];
-        const pathSegments = pathString.split('.');
-        
-        // Navigate to the value using the path segments
-        let value = state;
-        for (let i = 0; i < pathSegments.length; i++) {
-          const key = pathSegments[i];
-          const numKey = Number(key);
-          
-          // Use numeric index if it's a number, otherwise use string key
-          if (!isNaN(numKey) && Array.isArray(value)) {
-            value = value[numKey];
-          } else {
-            value = value?.[key];
-          }
-        }
-        
-        // Log all state changes
-        this.logStateChange(id, ip, pathString, null, value);
-        const displayValue = value === undefined ? '(undefined)' : (typeof value === 'object' ? JSON.stringify(value) : value);
-        console.log(`ATEM ${id} state changed at ${pathString}:`, displayValue);
-        
-        // Emit state change event
-        this.emit('state-change', {
-          deviceId: id,
-          deviceIp: ip,
-          path: pathString,
-          state: value,
-          fullState: state,
-        });
-
-        // Handle sync if enabled and value is defined
-        if (value !== undefined) {
-          console.log(`>>> Calling handleStateChange for ${id}, path: ${pathString}, value: ${value}`);
-          this.handleStateChange(id, pathString, value);
-        } else {
-          console.log(`>>> Skipping handleStateChange - value is undefined`);
-        }
-      });
-
-      // Attempt connection
-      atemConnection.connect(ip);
-      
-      // Set a timeout for connection attempt
-      const connectionTimeout = new Promise<void>((_, reject) => {
-        setTimeout(() => {
-          if (!device.connected) {
-            reject(new Error('Connection timeout'));
-          }
-        }, 5000);
-      });
-
-      // Wait for connection or timeout
-      await Promise.race([
-        new Promise<void>((resolve) => {
-          const checkConnection = setInterval(() => {
-            if (device.connected) {
-              clearInterval(checkConnection);
-              resolve();
-            }
-          }, 100);
-          setTimeout(() => clearInterval(checkConnection), 5000);
-        }),
-        connectionTimeout,
-      ]);
+      if (software === 'vmix') {
+        await this.connectVmix(device);
+      } else {
+        await this.connectAtem(device);
+      }
     } catch (error) {
       const device = this.devices.get(id);
       if (device) {
@@ -202,10 +99,217 @@ export class ATEMConnectionManager extends EventEmitter {
         if (device.atemConnection) {
           device.atemConnection.disconnect();
         }
+        if (device.vmixConnection) {
+          device.vmixConnection.disconnect();
+        }
         this.emit('connection-change', id, false);
       }
-      throw new Error(`Failed to connect to ATEM at ${ip}: ${(error as Error).message}`);
+      throw new Error(`Failed to connect to ${software.toUpperCase()} at ${ip}: ${(error as Error).message}`);
     }
+  }
+
+  private async connectAtem(device: ATEMDevice): Promise<void> {
+    const { id, ip } = device;
+
+    // Create ATEM connection
+    const atemConnection = new Atem();
+    device.atemConnection = atemConnection;
+
+    // Setup info and debug logging
+    atemConnection.on('info', (msg: string) => {
+      console.log(`[INFO] ATEM ${id}:`, msg);
+    });
+
+    atemConnection.on('debug', (msg: string) => {
+      // Suppress "Unknown command" debug messages to reduce noise
+      if (!msg.includes('Unknown command')) {
+        console.log(`[DEBUG] ATEM ${id}:`, msg);
+      }
+    });
+
+    // Setup error handling
+    atemConnection.on('error', (error: any) => {
+      console.error(`ATEM ${id} error:`, error);
+      this.logStateChange(id, ip, 'connection.error', device.connected, false);
+      device.connected = false;
+      this.emit('connection-change', id, false);
+    });
+
+    // Setup disconnection handling
+    atemConnection.on('disconnected', () => {
+      console.log(`ATEM ${id} disconnected`);
+      this.logStateChange(id, ip, 'connection.disconnected', device.connected, false);
+      device.connected = false;
+      this.emit('connection-change', id, false);
+    });
+
+    // Setup connection success
+    atemConnection.on('connected', () => {
+      console.log(`Connected to ATEM ${id} at ${ip}`);
+      this.logStateChange(id, ip, 'connection.connected', device.connected, true);
+      device.connected = true;
+      this.emit('connection-change', id, true);
+    });
+
+    // Setup state change logging
+    atemConnection.on('stateChanged', (state: any, pathArray: string[]) => {
+      console.log(`[DEBUG v2] stateChanged event fired for ${id}`);
+      device.lastState = state;
+
+      // Path comes as a single string in an array, e.g., ['video.mixEffects.0.programInput']
+      // Split it into individual segments
+      const pathString = pathArray[0];
+      const pathSegments = pathString.split('.');
+
+      // Navigate to the value using the path segments
+      let value = state;
+      for (let i = 0; i < pathSegments.length; i++) {
+        const key = pathSegments[i];
+        const numKey = Number(key);
+
+        // Use numeric index if it's a number, otherwise use string key
+        if (!isNaN(numKey) && Array.isArray(value)) {
+          value = value[numKey];
+        } else {
+          value = value?.[key];
+        }
+      }
+
+      // Log all state changes
+      this.logStateChange(id, ip, pathString, null, value);
+      const displayValue = value === undefined ? '(undefined)' : (typeof value === 'object' ? JSON.stringify(value) : value);
+      console.log(`ATEM ${id} state changed at ${pathString}:`, displayValue);
+
+      // Emit state change event
+      this.emit('state-change', {
+        deviceId: id,
+        deviceIp: ip,
+        path: pathString,
+        state: value,
+        fullState: state,
+      });
+
+      // Handle sync if enabled and value is defined
+      if (value !== undefined) {
+        console.log(`>>> Calling handleStateChange for ${id}, path: ${pathString}, value: ${value}`);
+        this.handleStateChange(id, pathString, value);
+      } else {
+        console.log(`>>> Skipping handleStateChange - value is undefined`);
+      }
+    });
+
+    // Attempt connection
+    atemConnection.connect(ip);
+
+    // Set a timeout for connection attempt
+    const connectionTimeout = new Promise<void>((_, reject) => {
+      setTimeout(() => {
+        if (!device.connected) {
+          reject(new Error('Connection timeout'));
+        }
+      }, 5000);
+    });
+
+    // Wait for connection or timeout
+    await Promise.race([
+      new Promise<void>((resolve) => {
+        const checkConnection = setInterval(() => {
+          if (device.connected) {
+            clearInterval(checkConnection);
+            resolve();
+          }
+        }, 100);
+        setTimeout(() => clearInterval(checkConnection), 5000);
+      }),
+      connectionTimeout,
+    ]);
+  }
+
+  private async connectVmix(device: ATEMDevice): Promise<void> {
+    const { id, ip, port } = device;
+
+    const vmix = new VmixConnection();
+    device.vmixConnection = vmix;
+
+    vmix.on('connected', () => {
+      console.log(`Connected to vMix ${id} at ${ip}:${port}`);
+      this.logStateChange(id, ip, 'connection.connected', device.connected, true);
+      device.connected = true;
+      this.emit('connection-change', id, true);
+    });
+
+    vmix.on('disconnected', () => {
+      console.log(`vMix ${id} disconnected`);
+      this.logStateChange(id, ip, 'connection.disconnected', device.connected, false);
+      device.connected = false;
+      this.emit('connection-change', id, false);
+    });
+
+    vmix.on('error', (error: Error) => {
+      console.error(`vMix ${id} error:`, error.message);
+      this.logStateChange(id, ip, 'connection.error', device.connected, false);
+      device.connected = false;
+      this.emit('connection-change', id, false);
+    });
+
+    // When this vMix device is a master, forward program/preview changes as synthetic state changes
+    vmix.on('programChange', (input: number) => {
+      const path = 'video.mixEffects.0.programInput';
+      this.logStateChange(id, ip, path, device.lastProgramInput, input);
+      device.lastProgramInput = input;
+      console.log(`vMix ${id} program changed to ${input}`);
+
+      this.emit('state-change', {
+        deviceId: id,
+        deviceIp: ip,
+        path,
+        state: input,
+        fullState: null,
+      });
+
+      this.handleStateChange(id, path, input);
+    });
+
+    vmix.on('previewChange', (input: number) => {
+      const path = 'video.mixEffects.0.previewInput';
+      this.logStateChange(id, ip, path, device.lastPreviewInput, input);
+      device.lastPreviewInput = input;
+      console.log(`vMix ${id} preview changed to ${input}`);
+
+      this.emit('state-change', {
+        deviceId: id,
+        deviceIp: ip,
+        path,
+        state: input,
+        fullState: null,
+      });
+
+      this.handleStateChange(id, path, input);
+    });
+
+    vmix.connect(ip, port);
+
+    // Wait for connection or timeout
+    const connectionTimeout = new Promise<void>((_, reject) => {
+      setTimeout(() => {
+        if (!device.connected) {
+          reject(new Error('Connection timeout'));
+        }
+      }, 5000);
+    });
+
+    await Promise.race([
+      new Promise<void>((resolve) => {
+        const checkConnection = setInterval(() => {
+          if (device.connected) {
+            clearInterval(checkConnection);
+            resolve();
+          }
+        }, 100);
+        setTimeout(() => clearInterval(checkConnection), 5000);
+      }),
+      connectionTimeout,
+    ]);
   }
 
   private isValidIP(ip: string): boolean {
@@ -219,6 +323,9 @@ export class ATEMConnectionManager extends EventEmitter {
       device.connected = false;
       if (device.atemConnection) {
         device.atemConnection.disconnect();
+      }
+      if (device.vmixConnection) {
+        device.vmixConnection.disconnect();
       }
       this.logStateChange(id, device.ip, 'connection.disconnected', true, false);
       this.emit('connection-change', id, false);
@@ -317,39 +424,26 @@ export class ATEMConnectionManager extends EventEmitter {
       return;
     }
 
-    // Determine sync direction
-    let shouldSyncToRemote = false;
-    let shouldSyncToLocal = false;
-
-    if (sourceId === 'local' && this.syncSettings.localToRemote) {
-      shouldSyncToRemote = true;
-      console.log(`Local → Remote sync enabled`);
-    } else if (sourceId !== 'local' && this.syncSettings.remoteToLocal) {
-      shouldSyncToLocal = true;
-      console.log(`Remote → Local sync enabled`);
+    // Only propagate changes from master to slaves
+    if (sourceId !== 'master') {
+      console.log(`Ignoring change from slave device ${sourceId}`);
+      console.log(`======================\n`);
+      return;
     }
 
-    console.log(`Sync directions: toRemote=${shouldSyncToRemote}, toLocal=${shouldSyncToLocal}`);
-
-    // Apply changes to target devices
-    if (shouldSyncToRemote) {
-      console.log(`Syncing from local to all remote devices...`);
-      this.devices.forEach((device, id) => {
-        if (id !== sourceId && id !== 'local' && device.connected && device.atemConnection) {
-          console.log(`  → Target: ${id}`);
+    console.log(`Syncing from master to all slave devices...`);
+    this.devices.forEach((device, id) => {
+      if (id !== 'master' && device.connected) {
+        if (device.software === 'vmix' && device.vmixConnection) {
+          // vMix slaves only receive program/preview changes
+          console.log(`  → Target (vMix): ${id}`);
+          this.applySyncToVmixDevice(device, path, value);
+        } else if (device.atemConnection) {
+          console.log(`  → Target (ATEM): ${id}`);
           this.applySyncToDevice(device, path, value);
         }
-      });
-    }
-
-    if (shouldSyncToLocal) {
-      console.log(`Syncing from remote to local...`);
-      const localDevice = this.devices.get('local');
-      if (localDevice && localDevice.connected && localDevice.atemConnection) {
-        console.log(`  → Target: local`);
-        this.applySyncToDevice(localDevice, path, value);
       }
-    }
+    });
     console.log(`======================\n`);
   }
 
@@ -357,23 +451,26 @@ export class ATEMConnectionManager extends EventEmitter {
     console.log(`\n=== Syncing CUT preview change ===`);
     console.log(`Source: ${sourceId}, Preview: ${previewValue}`);
     
-    // Determine sync direction
-    if (sourceId === 'local' && this.syncSettings.localToRemote) {
-      this.devices.forEach((device, id) => {
-        if (id !== sourceId && id !== 'local' && device.connected && device.atemConnection) {
-          console.log(`  → Syncing preview ${previewValue} to ${id}`);
+    // Only propagate from master to slaves
+    if (sourceId !== 'master') {
+      console.log(`Ignoring preview change from slave device ${sourceId}`);
+      console.log(`======================\n`);
+      return;
+    }
+
+    this.devices.forEach((device, id) => {
+      if (id !== 'master' && device.connected) {
+        if (device.software === 'vmix' && device.vmixConnection) {
+          console.log(`  → Syncing preview ${previewValue} to vMix ${id}`);
+          device.vmixConnection.setPreview(previewValue);
+          device.lastPreviewInput = previewValue;
+        } else if (device.atemConnection) {
+          console.log(`  → Syncing preview ${previewValue} to ATEM ${id}`);
           device.atemConnection.changePreviewInput(previewValue, 0);
           device.lastPreviewInput = previewValue;
         }
-      });
-    } else if (sourceId !== 'local' && this.syncSettings.remoteToLocal) {
-      const localDevice = this.devices.get('local');
-      if (localDevice && localDevice.connected && localDevice.atemConnection) {
-        console.log(`  → Syncing preview ${previewValue} to local`);
-        localDevice.atemConnection.changePreviewInput(previewValue, 0);
-        localDevice.lastPreviewInput = previewValue;
       }
-    }
+    });
     console.log(`======================\n`);
   }
 
@@ -769,6 +866,33 @@ export class ATEMConnectionManager extends EventEmitter {
         console.log(`✓ Synced ${path} to device ${device.id}`);
       } catch (error) {
         console.error(`✗ Failed to sync ${path} to device ${device.id}:`, error);
+      }
+    }, delay);
+  }
+
+  private applySyncToVmixDevice(device: ATEMDevice, path: string, value: any): void {
+    if (!device.vmixConnection) return;
+
+    const delay = this.syncSettings.syncDelay;
+
+    setTimeout(() => {
+      if (!device.vmixConnection) return;
+
+      try {
+        if (path.includes('programInput')) {
+          console.log(`Syncing programInput to ${value} on vMix device ${device.id}`);
+          device.vmixConnection.setProgram(value);
+        } else if (path.includes('previewInput')) {
+          console.log(`Syncing previewInput to ${value} on vMix device ${device.id}`);
+          device.vmixConnection.setPreview(value);
+        } else {
+          console.log(`Skipping non-input sync path for vMix: ${path}`);
+          return;
+        }
+
+        console.log(`✓ Synced ${path} to vMix device ${device.id}`);
+      } catch (error) {
+        console.error(`✗ Failed to sync ${path} to vMix device ${device.id}:`, error);
       }
     }, delay);
   }

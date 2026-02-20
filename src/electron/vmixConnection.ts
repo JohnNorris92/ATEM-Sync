@@ -13,6 +13,8 @@ export class VmixConnection extends EventEmitter {
   private waitingForXml: boolean = false;
   private xmlLength: number = 0;
   private xmlBuffer: string = '';
+  private pollInterval: ReturnType<typeof setInterval> | null = null;
+  private pollRateMs: number = 1000; // Poll vMix XML state every 1 second
 
   connect(ip: string, port: number = 8099): void {
     this.ip = ip;
@@ -28,6 +30,9 @@ export class VmixConnection extends EventEmitter {
       // Subscribe to tally updates and request initial XML state
       this.send('SUBSCRIBE TALLY\r\n');
       this.send('XML\r\n');
+
+      // Start periodic XML polling as a safety net to catch missed tally updates
+      this.startPolling();
     });
 
     this.socket.on('data', (data: Buffer) => {
@@ -51,6 +56,7 @@ export class VmixConnection extends EventEmitter {
   }
 
   disconnect(): void {
+    this.stopPolling();
     if (this.socket) {
       this.socket.destroy();
       this.socket = null;
@@ -71,6 +77,36 @@ export class VmixConnection extends EventEmitter {
 
   setPreview(input: number): void {
     this.send(`FUNCTION PreviewInput Input=${input}\r\n`);
+  }
+
+  getLastProgramInput(): number {
+    return this.lastProgramInput;
+  }
+
+  getLastPreviewInput(): number {
+    return this.lastPreviewInput;
+  }
+
+  requestXmlState(): void {
+    this.send('XML\r\n');
+  }
+
+  private startPolling(): void {
+    this.stopPolling();
+    console.log(`[vMix] Starting XML state polling every ${this.pollRateMs}ms`);
+    this.pollInterval = setInterval(() => {
+      if (this.connected && !this.waitingForXml) {
+        this.send('XML\r\n');
+      }
+    }, this.pollRateMs);
+  }
+
+  private stopPolling(): void {
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+      this.pollInterval = null;
+      console.log(`[vMix] Stopped XML state polling`);
+    }
   }
 
   private send(command: string): void {
@@ -222,12 +258,13 @@ export class VmixConnection extends EventEmitter {
   private parseXmlState(xml: string): void {
     try {
       // Parse <active> tag for program input number
+      // vMix XML uses 1-based input numbers in <active> and <preview>
       const activeMatch = xml.match(/<active>(\d+)<\/active>/);
       if (activeMatch) {
         const programInput = parseInt(activeMatch[1], 10);
         if (programInput !== this.lastProgramInput) {
+          console.log(`[vMix] XML poll corrected program: ${this.lastProgramInput} → ${programInput}`);
           this.lastProgramInput = programInput;
-          console.log(`[vMix] XML state - Program: ${programInput}`);
           this.emit('programChange', programInput);
         }
       }
@@ -237,8 +274,8 @@ export class VmixConnection extends EventEmitter {
       if (previewMatch) {
         const previewInput = parseInt(previewMatch[1], 10);
         if (previewInput !== this.lastPreviewInput) {
+          console.log(`[vMix] XML poll corrected preview: ${this.lastPreviewInput} → ${previewInput}`);
           this.lastPreviewInput = previewInput;
-          console.log(`[vMix] XML state - Preview: ${previewInput}`);
           this.emit('previewChange', previewInput);
         }
       }

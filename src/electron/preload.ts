@@ -1,8 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  connectATEM: (id: string, ip: string) =>
-    ipcRenderer.invoke('connect-atem', { id, ip }),
+  connectATEM: (id: string, ip: string, software: 'atem' | 'vmix', port: number) =>
+    ipcRenderer.invoke('connect-atem', { id, ip, software, port }),
   disconnectATEM: (id: string) =>
     ipcRenderer.invoke('disconnect-atem', { id }),
   getATEMStatus: () =>

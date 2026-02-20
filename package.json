@@ -7,8 +7,8 @@
   "author": "",
   "license": "MIT",
   "scripts": {
-    "start": "concurrently \"npm run start:react\" \"wait-on http://localhost:3000 && npm run start:electron\"",
-    "start:react": "set BROWSER=none&& react-scripts start",
+    "start": "concurrently \"npm run start:react\" \"wait-on http://localhost:3100 && npm run start:electron\"",
+    "start:react": "set PORT=3100&& set BROWSER=none&& react-scripts start",
     "start:electron": "electron .",
     "build": "npm run build:react && npm run build:electron",
     "build:react": "react-scripts build",
@@ -16,7 +16,7 @@
     "watch:electron": "nodemon --watch src/electron --ext ts --exec \"npm run build:electron && electron .\"",
     "eject": "react-scripts eject",
     "test": "react-scripts test",
-    "dev": "concurrently \"npm run start:react\" \"wait-on http://localhost:3000 && npm run watch:electron\" --kill-others-on-exit",
+    "dev": "concurrently \"npm run start:react\" \"wait-on http://localhost:3100 && npm run watch:electron\" --kill-others-on-exit",
     "dev:electron-only": "npm run watch:electron",
     "pack": "electron-builder --dir",
     "dist": "npm run build:electron && electron-builder"

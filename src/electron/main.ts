@@ -14,12 +14,10 @@ const atemManager = new ATEMConnectionManager();
 const store = new Store<AppConfig>({
   defaults: {
     devices: [
-      { id: 'local', ip: '', label: 'Local ATEM', type: 'local', connected: false }
+      { id: 'master', ip: '', label: 'Master ATEM', type: 'master', connected: false, software: 'atem' as const, port: 9910 }
     ],
     syncSettings: {
       syncEnabled: true,
-      localToRemote: true,
-      remoteToLocal: true,
       syncDelay: 50,
       watchInputs: true,
       watchTransitions: true,
@@ -37,6 +35,39 @@ const store = new Store<AppConfig>({
   }
 });
 
+// One-time migration: convert old local/remote config to master/slave
+function migrateConfig(): void {
+  const devices = store.get('devices') as any[];
+  let migrated = false;
+
+  const newDevices = devices.map((d: any) => {
+    if (d.id === 'local') {
+      migrated = true;
+      return { ...d, id: 'master', type: 'master', label: 'Master ATEM' };
+    }
+    if (d.type === 'remote' || (d.id && d.id.startsWith('remote-'))) {
+      migrated = true;
+      const newId = d.id.replace(/^remote-/, 'slave-');
+      return { ...d, id: newId, type: 'slave', label: d.label.replace('Remote', 'Slave') };
+    }
+    return d;
+  });
+
+  if (migrated) {
+    store.set('devices', newDevices);
+  }
+
+  // Strip old direction fields from syncSettings
+  const syncSettings = store.get('syncSettings') as any;
+  if ('localToRemote' in syncSettings || 'remoteToLocal' in syncSettings) {
+    delete syncSettings.localToRemote;
+    delete syncSettings.remoteToLocal;
+    store.set('syncSettings', syncSettings);
+  }
+}
+
+migrateConfig();
+
 const createWindow = () => {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -49,7 +80,7 @@ const createWindow = () => {
   });
 
   const startUrl = isDev
-    ? 'http://localhost:3000'
+    ? 'http://localhost:3100'
     : `file://${path.join(__dirname, '../../build/index.html')}`;
 
   mainWindow.loadURL(startUrl);
@@ -93,9 +124,9 @@ ipcMain.handle('save-config', async (event, config: AppConfig) => {
 });
 
 // IPC Handlers
-ipcMain.handle('connect-atem', async (event, { id, ip }) => {
+ipcMain.handle('connect-atem', async (event, { id, ip, software, port }) => {
   try {
-    await atemManager.connect(id, ip);
+    await atemManager.connect(id, ip, software || 'atem', port);
     return { success: true };
   } catch (error) {
     return { success: false, error: (error as Error).message };
